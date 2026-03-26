@@ -14,6 +14,7 @@ class ChatController extends Controller
 
     public function store(Request $request)
     {
+        // dd($request->all());
         $payload = $request->validate([
             'chatbot_id' => 'required|string',
             'question' => 'required|string',

@@ -6,6 +6,7 @@ use App\Models\Document;
 use App\Repositories\EmbeddingRepository;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
+use Throwable;
 
 class EmbeddingService
 {
@@ -28,9 +29,23 @@ class EmbeddingService
                 ->implode("\n\n");
         }
 
-        $results = collect($this->chroma->query($tenant->getKey(), $chatbotId, $question, $limit * 3))
-            ->unique(fn (array $item) => data_get($item, 'id') ?: data_get($item, 'document'))
-            ->take($limit);
+        $results = collect();
+
+        try {
+            $results = collect($this->chroma->query($tenant->getKey(), $chatbotId, $question, $limit * 3))
+                ->unique(fn (array $item) => data_get($item, 'id') ?: data_get($item, 'document'))
+                ->take($limit);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            $results = collect($this->embeddings->latestForChatbot($chatbotId, $limit))
+                ->map(fn ($item) => [
+                    'id' => data_get($item, 'vector_reference') ?: "db_{$item->getKey()}",
+                    'document' => (string) data_get($item, 'content_text'),
+                ])
+                ->unique(fn (array $item) => data_get($item, 'id') ?: data_get($item, 'document'))
+                ->take($limit);
+        }
 
         return $results->pluck('document')->filter()->implode("\n\n");
     }
@@ -110,3 +125,4 @@ class EmbeddingService
         return trim($normalized);
     }
 }
+
